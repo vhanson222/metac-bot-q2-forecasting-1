@@ -144,6 +144,31 @@ class TemplateForecaster(ForecastBot):
             logger.info(f"Research for question {question.page_url}:\n{full_research}")
             return full_research
 
+
+
+    async def _call_perplexity(self, question: str, use_open_router: bool = False) -> str:
+        prompt = clean_indents(
+            f"""
+            You are an assistant to a superforecaster.
+            The superforecaster will give you a question they intend to forecast on.
+            To be a great assistant, you generate a concise but detailed rundown of the most relevant news, including if the question would resolve Yes or No based on current information.
+            You do not produce forecasts yourself but you should look at Metaculus, Kalshi, Polymarket, Good Judgment Open, Rand, and Infer forecasts to aide your research.
+
+            Question:
+            {question}
+            """
+        )  # NOTE: The metac bot in Q1 put everything but the question in the system prompt.
+        if use_open_router:
+            model_name = "openrouter/perplexity/sonar-reasoning"
+        else:
+            model_name = "perplexity/sonar-pro"  # paerplexity/sonar-reasoning and perplexity/sonar are cheaper, but do only 1 search
+        model = GeneralLlm(
+            model=model_name,
+            temperature=0.1,
+        )
+        response = await model.invoke(prompt)
+        return response
+
     async def run_research(self, question: MetaculusQuestion) -> str:
 
         time.sleep(1)  # Rate limit for AskNews API
@@ -159,10 +184,9 @@ class TemplateForecaster(ForecastBot):
                     logger.warning(
                         f"Error researching question '{question.question_text}': {e}"
                     )
-            elif os.getenv("EXA_API_KEY"):
-                research = await self._call_exa_smart_searcher(question.question_text)
-            elif os.getenv("PERPLEXITY_API_KEY"):
-                research = await self._call_perplexity(question.question_text)
+                research = await self._call_perplexity(
+                    question.question_text, use_open_router=True
+                )
             elif os.getenv("OPENROUTER_API_KEY"):
                 research = await self._call_perplexity(
                     question.question_text, use_open_router=True
